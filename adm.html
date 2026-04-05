@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Bendahara</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 p-4">
+
+<!-- 🔐 LOCK -->
+<div id="lockScreen" class="fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded-2xl shadow w-80 text-center">
+    <h2 class="text-xl font-bold mb-4">🔐 Akses Bendahara</h2>
+    <input type="password" id="kodeAkses" class="border w-full p-2 rounded mb-3 text-center">
+    <button onclick="cekKode()" class="bg-green-500 text-white w-full py-2 rounded">Masuk</button>
+    <p id="errorMsg" class="text-red-500 mt-2 text-sm"></p>
+  </div>
+</div>
+
+<!-- ⏳ LOADING -->
+<div id="loading" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white px-6 py-4 rounded-xl shadow">
+    ⏳ Memproses...
+  </div>
+</div>
+
+<h1 class="text-2xl font-bold mb-4 text-center">Dashboard Bendahara</h1>
+
+<!-- FILTER -->
+<div class="bg-white p-3 rounded-xl shadow mb-4 flex gap-2">
+  <select id="bulan" class="border p-2 rounded"></select>
+  <select id="tahun" class="border p-2 rounded"></select>
+</div>
+
+<!-- FORM -->
+<div class="bg-white p-4 rounded-xl shadow mb-4">
+  <input type="hidden" id="editId">
+  <input type="date" id="tanggal" class="border p-2 w-full mb-2">
+  <input type="text" id="keterangan" placeholder="Keterangan" class="border p-2 w-full mb-2">
+  <select id="dk" class="border p-2 w-full mb-2">
+    <option value="D">Pemasukan</option>
+    <option value="K">Pengeluaran</option>
+  </select>
+  <input type="number" id="nominal" placeholder="Nominal" class="border p-2 w-full mb-2">
+  <button onclick="simpan()" class="bg-green-500 text-white w-full py-2 rounded">Simpan</button>
+</div>
+
+<!-- TABEL -->
+<div class="bg-white p-4 rounded-xl shadow overflow-x-auto">
+<table class="w-full text-sm">
+<thead>
+<tr class="bg-gray-200">
+<th>No</th>
+<th>Tanggal</th>
+<th>Keterangan</th>
+<th>Nominal</th>
+<th>Aksi</th>
+</tr>
+</thead>
+<tbody id="dataBody"></tbody>
+</table>
+</div>
+
+<script>
+
+const KODE_RAHASIA = "123456";
+const SESSION_TIME = 3600000;
+const API_URL = "https://script.google.com/macros/s/AKfycbwv6FO86kYV2MBjAJrvhC53IN-GbqTLV-FpF9jbj2S633G2qKqb4kZn5WT6H7_g7ZfZAg/exec";
+
+let allData = [];
+
+// ================= LOADING =================
+function showLoading() {
+  document.getElementById("loading").classList.remove("hidden");
+}
+function hideLoading() {
+  document.getElementById("loading").classList.add("hidden");
+}
+
+// ================= LOGIN =================
+function cekKode() {
+  const input = document.getElementById("kodeAkses").value;
+
+  if (input === KODE_RAHASIA) {
+    document.getElementById("lockScreen").style.display = "none";
+    localStorage.setItem("aksesKas", "true");
+    localStorage.setItem("loginTime", Date.now());
+  } else {
+    document.getElementById("errorMsg").innerText = "Kode salah!";
+  }
+}
+
+function cekSession() {
+  const akses = localStorage.getItem("aksesKas");
+  const loginTime = localStorage.getItem("loginTime");
+
+  if (akses === "true" && loginTime) {
+    if (Date.now() - loginTime < SESSION_TIME) {
+      document.getElementById("lockScreen").style.display = "none";
+    } else {
+      localStorage.clear();
+    }
+  }
+}
+
+// ================= FILTER =================
+function initFilter() {
+  const bulanEl = document.getElementById("bulan");
+  const tahunEl = document.getElementById("tahun");
+
+  const bulanNama = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+
+  bulanNama.forEach((b,i)=>{
+    bulanEl.innerHTML += `<option value="${i}">${b}</option>`;
+  });
+
+  const tahunSet = new Set();
+  allData.forEach(r=>{
+    const t = new Date(r.TANGGAL).getFullYear();
+    if(!isNaN(t)) tahunSet.add(t);
+  });
+
+  [...tahunSet].sort().forEach(t=>{
+    tahunEl.innerHTML += `<option value="${t}">${t}</option>`;
+  });
+
+  const now = new Date();
+  bulanEl.value = now.getMonth();
+  tahunEl.value = now.getFullYear();
+
+  bulanEl.onchange = render;
+  tahunEl.onchange = render;
+}
+
+// ================= DATA =================
+function loadData() {
+  showLoading();
+  fetch(API_URL)
+    .then(res => res.json())
+    .then(data => {
+      allData = data;
+      initFilter();
+      render();
+      hideLoading();
+    });
+}
+
+function render() {
+  const bulan = parseInt(document.getElementById("bulan").value);
+  const tahun = parseInt(document.getElementById("tahun").value);
+
+  const body = document.getElementById("dataBody");
+  body.innerHTML = "";
+
+  let nomor = 1;
+
+  allData.forEach(row => {
+    const tgl = new Date(row.TANGGAL);
+
+    if (tgl.getMonth() !== bulan || tgl.getFullYear() !== tahun) return;
+
+    const warna = row.DK === "D" ? "text-green-600" : "text-red-600";
+    const simbol = row.DK === "D" ? "+" : "-";
+
+    body.innerHTML += `
+      <tr class="border-b">
+        <td>${nomor++}</td>
+        <td>${row.TANGGAL}</td>
+        <td>${row.KETERANGAN}</td>
+        <td class="${warna}">
+          ${simbol} Rp ${parseInt(row.NOMINAL).toLocaleString()}
+        </td>
+        <td>
+          <button onclick='editData(${JSON.stringify(row)})' class="text-blue-500">Edit</button>
+          |
+          <button onclick='hapus("${row.ID}")' class="text-red-500">Hapus</button>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+// ================= CRUD =================
+function simpan() {
+  showLoading();
+
+  const id = document.getElementById("editId").value;
+
+  const data = {
+    action: id ? "update" : "add",
+    id,
+    tanggal: document.getElementById("tanggal").value,
+    keterangan: document.getElementById("keterangan").value,
+    dk: document.getElementById("dk").value,
+    nominal: document.getElementById("nominal").value
+  };
+
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify(data)
+  }).then(()=>{
+    resetForm();
+    loadData();
+  });
+}
+
+function editData(row) {
+  document.getElementById("editId").value = row.ID;
+  document.getElementById("tanggal").value = row.TANGGAL;
+  document.getElementById("keterangan").value = row.KETERANGAN;
+  document.getElementById("dk").value = row.DK;
+  document.getElementById("nominal").value = row.NOMINAL;
+}
+
+function hapus(id) {
+  if (!confirm("Yakin hapus?")) return;
+
+  showLoading();
+
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({ action:"delete", id })
+  }).then(loadData);
+}
+
+function resetForm() {
+  document.getElementById("editId").value = "";
+  document.getElementById("tanggal").value = "";
+  document.getElementById("keterangan").value = "";
+  document.getElementById("nominal").value = "";
+}
+
+// INIT
+cekSession();
+loadData();
+
+</script>
+
+</body>
+</html>
